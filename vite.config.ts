@@ -7,10 +7,29 @@ export default defineConfig({
     react(),
     nodePolyfills({
       include: ['buffer', 'crypto', 'stream', 'util'],
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
     }),
   ],
   optimizeDeps: {
-    exclude: ['@coral-xyz/anchor'],
+    esbuildOptions: {
+      target: 'es2020',
+    },
+    include: [
+      '@coral-xyz/anchor',
+      '@solana/web3.js',
+      'bn.js',
+      'buffer',
+    ],
+  },
+  build: {
+    target: 'es2020',
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
   },
   define: {
     'process.env': {},
