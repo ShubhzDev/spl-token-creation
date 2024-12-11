@@ -1,8 +1,8 @@
 import { Program, AnchorProvider, Idl } from '@coral-xyz/anchor';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { PROGRAM_ID } from './constants';
-import { STAKING_IDL } from '../idl/staking';
-import type { StakingProgram } from '../idl/types';
+import  Staking_IDL from '../idl/staking.json';
+import type { StakingProgram } from '../idl/staking.ts';
 
 export const getProgram = (connection: Connection, wallet: any) => {
   const provider = new AnchorProvider(
@@ -10,9 +10,9 @@ export const getProgram = (connection: Connection, wallet: any) => {
     wallet,
     AnchorProvider.defaultOptions()
   );
-  return new Program<StakingProgram>(
-    STAKING_IDL as Idl,
-    PROGRAM_ID,
+
+  return new Program(
+    Staking_IDL as Idl,
     provider
   );
 };
