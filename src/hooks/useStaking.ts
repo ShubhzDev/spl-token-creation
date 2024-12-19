@@ -6,6 +6,8 @@ import { getTokenBalance } from '../utils/token';
 import { StakingState } from '../types';
 import { useToast } from './useToast';
 import { BN } from '@coral-xyz/anchor';
+import { SystemProgram } from '@solana/web3.js';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 export const useStaking = () => {
   const { connection } = useConnection();
@@ -63,6 +65,11 @@ export const useStaking = () => {
           user: wallet.publicKey,
           pool: poolAddress,
           userStake: userStakeAddress,
+          // Add missing required accounts
+          tokenVault: (await program.account.stakingPool.fetch(poolAddress)).tokenVault,
+          userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
 
@@ -84,13 +91,18 @@ export const useStaking = () => {
       const program = getProgram(connection, wallet);
       const poolAddress = await findStakingPoolAddress(INTW_MINT);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
+      const poolAccount = await program.account.stakingPool.fetch(poolAddress);
 
       await program.methods
         .unstake(new BN(amount * 1e9))
         .accounts({
           user: wallet.publicKey,
           pool: poolAddress,
+          poolAuthority: poolAddress,
+          tokenVault: poolAccount.tokenVault,
+          userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
           userStake: userStakeAddress,
+          tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
 
