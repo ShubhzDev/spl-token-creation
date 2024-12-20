@@ -6,7 +6,7 @@ import { getTokenBalance } from '../utils/token';
 import { StakingState } from '../types';
 import { useToast } from './useToast';
 import { BN } from '@coral-xyz/anchor';
-import { SystemProgram } from '@solana/web3.js';
+import { SystemProgram, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 export const useStaking = () => {
@@ -65,7 +65,6 @@ export const useStaking = () => {
           user: wallet.publicKey,
           pool: poolAddress,
           userStake: userStakeAddress,
-          // Add missing required accounts
           tokenVault: (await program.account.stakingPool.fetch(poolAddress)).tokenVault,
           userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
           systemProgram: SystemProgram.programId,
@@ -93,12 +92,18 @@ export const useStaking = () => {
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const poolAccount = await program.account.stakingPool.fetch(poolAddress);
 
+      // Derive the pool authority PDA
+      const [poolAuthorityPDA] = await PublicKey.findProgramAddress(
+        [poolAddress.toBuffer()],
+        program.programId
+      );
+
       await program.methods
         .unstake(new BN(amount * 1e9))
         .accounts({
           user: wallet.publicKey,
           pool: poolAddress,
-          poolAuthority: poolAddress,
+          pool_authority: poolAuthorityPDA,
           tokenVault: poolAccount.tokenVault,
           userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
           userStake: userStakeAddress,
