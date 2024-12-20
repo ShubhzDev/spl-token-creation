@@ -103,7 +103,7 @@ export const useStaking = () => {
         .accounts({
           user: wallet.publicKey,
           pool: poolAddress,
-          pool_authority: poolAuthorityPDA,
+          poolAuthority: poolAuthorityPDA,
           tokenVault: poolAccount.tokenVault,
           userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
           userStake: userStakeAddress,
