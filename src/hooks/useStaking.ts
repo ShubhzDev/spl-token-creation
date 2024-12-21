@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, Keypair } from '@solana/web3.js';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { BN } from '@coral-xyz/anchor';
-import { web3 } from '@coral-xyz/anchor';
 import { INTW_MINT, APY } from '../config/solana';
 import { StakingState } from '../types';
 import { getProgram, findStakingPoolAddress, findUserStakeAddress } from '../utils/program';
@@ -23,65 +22,61 @@ export const useStaking = () => {
   const program = getProgram(connection, wallet);
 
   const fetchUserStake = async () => {
-    if (!wallet.publicKey) return;
+    if (!wallet.publicKey) return null;
 
     try {
       const poolAddress = await findStakingPoolAddress(INTW_MINT);
-      await initializePoolIfNeeded(poolAddress);
-
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
-      const availableAmount = await getTokenBalance(connection, wallet.publicKey, INTW_MINT);
 
-      try {
-        const userStake = await program.account.userStake.fetch(userStakeAddress);
-        setStakingState({
-          stakedAmount: userStake.amount.toNumber() / 1e9,
-          availableAmount,
-          rewards: userStake.rewards.toNumber() / 1e9,
-          apy: APY,
-        });
-      } catch (error) {
-        // If user stake doesn't exist yet, set initial state with available amount
-        setStakingState({
-          ...initialState,
-          availableAmount,
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching user stake:', error);
-      throw error;
-    }
-  };
-
-  const initializePoolIfNeeded = async (poolAddress: PublicKey) => {
-    try {
-      const poolInfo = await connection.getAccountInfo(poolAddress);
-      if (!poolInfo) {
-        const tokenVault = Keypair.generate();
-        const [, bump] = await PublicKey.findProgramAddress(
-          [Buffer.from('staking_pool'), INTW_MINT.toBuffer()],
-          program.programId
-        );
-
+      // Check if user stake account exists
+      const accountInfo = await connection.getAccountInfo(userStakeAddress);
+      
+      // If account doesn't exist, initialize it
+      if (!accountInfo) {
         await program.methods
-          .initializePool(bump)
+          .stake(new BN(0))
           .accounts({
-            authority: wallet.publicKey,
-            tokenMint: INTW_MINT,
+            user: wallet.publicKey,
             pool: poolAddress,
-            tokenVault: tokenVault.publicKey,
+            tokenVault: (await program.account.stakingPool.fetch(poolAddress)).tokenVault,
+            userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
+            userStake: userStakeAddress,
             systemProgram: SystemProgram.programId,
             tokenProgram: TOKEN_PROGRAM_ID,
-            rent: web3.SYSVAR_RENT_PUBKEY,
           })
-          .signers([tokenVault])
           .rpc();
       }
+
+      const userStake = await program.account.userStake.fetch(userStakeAddress);
+      return userStake;
     } catch (error) {
-      console.error('Error initializing pool:', error);
-      throw error;
+      console.error('Error fetching user stake:', error);
+      return null;
     }
   };
+
+  const updateStakingState = useCallback(async () => {
+    if (!wallet.publicKey) {
+      setStakingState(initialState);
+      return;
+    }
+
+    try {
+      const [userStake, availableAmount] = await Promise.all([
+        fetchUserStake(),
+        getTokenBalance(connection, wallet.publicKey, INTW_MINT),
+      ]);
+
+      setStakingState({
+        stakedAmount: userStake ? userStake.amount.toNumber() / 1e9 : 0,
+        availableAmount,
+        rewards: userStake ? userStake.rewards.toNumber() / 1e9 : 0,
+        apy: APY,
+      });
+    } catch (error) {
+      console.error('Error updating staking state:', error);
+    }
+  }, [wallet.publicKey, connection]);
 
   const stake = async (amount: number) => {
     if (!wallet.publicKey) return;
@@ -89,22 +84,22 @@ export const useStaking = () => {
     try {
       const poolAddress = await findStakingPoolAddress(INTW_MINT);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
-      const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
+      const poolAccount = await program.account.stakingPool.fetch(poolAddress);
 
       await program.methods
         .stake(new BN(amount * 1e9))
         .accounts({
           user: wallet.publicKey,
           pool: poolAddress,
-          tokenVault: (await program.account.stakingPool.fetch(poolAddress)).tokenVault,
-          userTokenAccount,
+          tokenVault: poolAccount.tokenVault,
+          userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
           userStake: userStakeAddress,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
 
-      await fetchUserStake();
+      await updateStakingState();
     } catch (error) {
       console.error('Error staking:', error);
       throw error;
@@ -117,11 +112,11 @@ export const useStaking = () => {
     try {
       const poolAddress = await findStakingPoolAddress(INTW_MINT);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
-      const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
-      const poolAuthorityPDA = PublicKey.findProgramAddressSync(
+      const poolAccount = await program.account.stakingPool.fetch(poolAddress);
+      const [poolAuthorityPDA] = await PublicKey.findProgramAddress(
         [poolAddress.toBuffer()],
         program.programId
-      )[0];
+      );
 
       await program.methods
         .unstake(new BN(amount * 1e9))
@@ -129,14 +124,14 @@ export const useStaking = () => {
           user: wallet.publicKey,
           pool: poolAddress,
           poolAuthority: poolAuthorityPDA,
-          tokenVault: (await program.account.stakingPool.fetch(poolAddress)).tokenVault,
-          userTokenAccount,
-          userStake: userStakeAddress,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          token_vault: poolAccount.tokenVault,
+          user_token_account: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
+          user_stake: userStakeAddress,
+          token_program: TOKEN_PROGRAM_ID,
         })
         .rpc();
 
-      await fetchUserStake();
+      await updateStakingState();
     } catch (error) {
       console.error('Error unstaking:', error);
       throw error;
@@ -144,12 +139,8 @@ export const useStaking = () => {
   };
 
   useEffect(() => {
-    if (wallet.publicKey) {
-      fetchUserStake();
-    } else {
-      setStakingState(initialState);
-    }
-  }, [wallet.publicKey, connection]);
+    updateStakingState();
+  }, [updateStakingState]);
 
   return {
     stakingState,

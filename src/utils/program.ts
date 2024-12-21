@@ -20,9 +20,12 @@ export const getProgram = (connection: Connection, wallet: any) => {
   );
 };
 
-export const findStakingPoolAddress = async (mint: PublicKey) => {
+export const findStakingPoolAddress = async (mint: PublicKey): Promise<PublicKey> => {
   const [poolAddress] = await PublicKey.findProgramAddress(
-    [Buffer.from('staking_pool'), mint.toBuffer()],
+    [
+      Buffer.from('staking_pool'),
+      mint.toBuffer()
+    ],
     PROGRAM_ID
   );
   return poolAddress;
@@ -31,9 +34,13 @@ export const findStakingPoolAddress = async (mint: PublicKey) => {
 export const findUserStakeAddress = async (
   poolAddress: PublicKey,
   userAddress: PublicKey
-) => {
+): Promise<PublicKey> => {
   const [stakeAddress] = await PublicKey.findProgramAddress(
-    [Buffer.from('user_stake'), poolAddress.toBuffer(), userAddress.toBuffer()],
+    [
+      Buffer.from('user_stake'),
+      poolAddress.toBuffer(),
+      userAddress.toBuffer()
+    ],
     PROGRAM_ID
   );
   return stakeAddress;
