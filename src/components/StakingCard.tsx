@@ -18,10 +18,10 @@ export const StakingCard: React.FC<StakingCardProps> = ({
 
   const handleStake = () => {
     const value = parseFloat(amount);
-    if (!isNaN(value) && value > 0 && value <= availableAmount) {
+    // if (!isNaN(value) && value > 0 && value <= availableAmount) {
       onStake(value);
       setAmount('');
-    }
+    // }
   };
 
   const handleUnstake = () => {

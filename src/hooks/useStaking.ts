@@ -42,6 +42,7 @@ export const useStaking = () => {
         rewards: userStakeAccount ? Number(userStakeAccount.rewards) / 1e9 : 0,
         apy: poolAccount.apy,
       });
+      
     } catch (error) {
       console.error('Error fetching staking info:', error);
       showToast('Failed to fetch staking information', 'error');
@@ -51,7 +52,11 @@ export const useStaking = () => {
   }, [wallet.publicKey, connection, showToast]);
 
   const stake = useCallback(async (amount: number) => {
+    console.log('program.methods.stake');
+
     if (!wallet.publicKey || !wallet.signTransaction) return;
+
+    console.log('program.methods.stake--1');
 
     try {
       setLoading(true);
@@ -71,6 +76,8 @@ export const useStaking = () => {
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
+
+        console.log('program.methods.stake');
 
       showToast(`Successfully staked ${amount} INTW`, 'success');
       await fetchStakingInfo();
