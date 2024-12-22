@@ -8,14 +8,12 @@ pub mod staking_program {
     use super::*;
 
     pub fn initialize_pool(
-        ctx: Context<InitializePool>,
-        bump: u8,
+        ctx: Context<InitializePool>
     ) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         pool.authority = ctx.accounts.authority.key();
         pool.token_mint = ctx.accounts.token_mint.key();
         pool.token_vault = ctx.accounts.token_vault.key();
-        pool.bump = bump;
         pool.total_staked = 0;
         pool.apy = 5; // Set APY to 5%
         Ok(())
@@ -105,61 +103,64 @@ pub mod staking_program {
         
         Ok(())
     }
+
 }
 
-pub fn calculate_rewards(
-    amount: u64,
-    last_update: i64,
-    current_time: i64,
-    apy: u8,
-) -> u64 {
-    // Calculate the duration in seconds since the last update
-    let duration = current_time - last_update;
+    pub fn calculate_rewards(
+        amount: u64,
+        last_update: i64,
+        current_time: i64,
+        apy: u8,
+    ) -> u64 {
+        // Calculate the duration in seconds since the last update
+        let duration = current_time - last_update;
 
-    // Convert APY from percentage to a decimal
-    let apy_decimal = apy as f64 / 100.0;
+        // Convert APY from percentage to a decimal
+        let apy_decimal = apy as f64 / 100.0;
 
-    // Calculate rewards based on the formula:
-    // rewards = (amount * apy_decimal / seconds_in_a_year) * duration
-    let seconds_in_a_year = 31_536_000.0; // Approximate seconds in a year
-    
-     // Check for negative duration
-     if duration < 0 {
-         return 0; // No rewards if duration is negative
-     }
+        // Calculate rewards based on the formula:
+        // rewards = (amount * apy_decimal / seconds_in_a_year) * duration
+        let seconds_in_a_year = 31_536_000.0; // Approximate seconds in a year
+        
+         // Check for negative duration
+         if duration < 0 {
+             return 0; // No rewards if duration is negative
+         }
 
-     let rewards = (amount as f64 * apy_decimal / seconds_in_a_year) * duration as f64;
+         let rewards = (amount as f64 * apy_decimal / seconds_in_a_year) * duration as f64;
 
-     // Return rewards as a u64
-     rewards.round() as u64
-}
+         // Return rewards as a u64
+         rewards.round() as u64
+    }
 
 #[derive(Accounts)]
 pub struct InitializePool<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    pub token_mint: Box<Account<'info, Mint>>,
+
+    pub token_mint: Account<'info, Mint>,
     
     #[account(
-       init,
-       payer = authority,
-       space = 8 + StakingPool::LEN,
-       seeds = [b"staking_pool", token_mint.key().as_ref()],
-       bump,
-   )]
-   pub pool: Account<'info, StakingPool>,
+        init,
+        payer = authority,
+        space = 8 + StakingPool::LEN,
+        seeds = [b"staking_pool", token_mint.key().as_ref()],
+        bump,
+    )]
+    pub pool: Account<'info, StakingPool>,
    
-   #[account(
-       init,
-       payer = authority,
-       token::mint = token_mint,
-       token::authority = pool,
-   )]
-   pub token_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init,
+        payer = authority,
+        token::mint = token_mint,
+        token::authority = pool,
+        seeds = [b"token_vault", token_mint.key().as_ref()],
+        bump
+    )]
+    pub token_vault: Account<'info, TokenAccount>,
    
-   pub system_program: Program<'info, System>,
-   pub token_program: Program<'info, Token>,
-   pub rent: Sysvar<'info, Rent>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -167,26 +168,42 @@ pub struct Stake<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
     
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"staking_pool", token_mint.key().as_ref()],
+        bump = pool.bump,
+    )]
     pub pool: Account<'info, StakingPool>,
     
-    #[account(mut)]
-    pub token_vault: Box<Account<'info, TokenAccount>>,
+
+    pub token_mint: Account<'info, Mint>,
     
-    #[account(mut)]
-    pub user_token_account: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"token_vault", token_mint.key().as_ref()],
+        bump,
+    )]
+    pub token_vault: Account<'info, TokenAccount>,
+    
+    #[account(
+        mut,
+        constraint = user_token_account.owner == user.key(),
+        constraint = user_token_account.mint == token_mint.key(),
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
 
     #[account(
-       init_if_needed,
-       payer = user,
-       space = 8 + UserStake::LEN,
-       seeds = [b"user_stake", pool.key().as_ref(), user.key().as_ref()],
-       bump,
-   )]
-   pub user_stake: Account<'info, UserStake>,
+        init_if_needed,
+        payer = user,
+        space = 8 + UserStake::LEN,
+        seeds = [b"user_stake", pool.key().as_ref(), user.key().as_ref()],
+        bump,
+    )]
+    pub user_stake: Account<'info, UserStake>,
+    
 
-   pub system_program: Program<'info, System>,
-   pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -202,10 +219,10 @@ pub struct Unstake<'info> {
    pub pool_authority: AccountInfo<'info>,
 
    #[account(mut)]
-   pub token_vault: Box<Account<'info, TokenAccount>>,
+   pub token_vault: Account<'info, TokenAccount>,
 
    #[account(mut)]
-   pub user_token_account: Box<Account<'info, TokenAccount>>,
+   pub user_token_account: Account<'info, TokenAccount>,
 
    #[account(
        mut,
@@ -249,4 +266,3 @@ pub enum ErrorCode {
    #[msg("Insufficient stake amount")]
    InsufficientStake,
 }
-

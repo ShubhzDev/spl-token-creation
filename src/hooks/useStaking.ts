@@ -42,8 +42,8 @@ export const useStaking = () => {
             tokenVault: tokenVaultAddress,
             userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
             userStake: userStakeAddress,
+            tokenMint : INTW_MINT,
             systemProgram: SystemProgram.programId,
-            tokenProgram: TOKEN_PROGRAM_ID,
           })
           .rpc();
       }
