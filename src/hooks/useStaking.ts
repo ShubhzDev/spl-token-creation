@@ -5,7 +5,7 @@ import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { BN } from '@coral-xyz/anchor';
 import { INTW_MINT, APY } from '../config/solana';
 import { StakingState } from '../types';
-import { getProgram, findStakingPoolAddress, findUserStakeAddress } from '../utils/program';
+import { getProgram, findStakingPoolAddress, findUserStakeAddress,findTokenVaultAddress } from '../utils/program';
 import { getTokenBalance } from '../utils/token';
 
 const initialState: StakingState = {
@@ -27,6 +27,7 @@ export const useStaking = () => {
     try {
       const poolAddress = await findStakingPoolAddress(INTW_MINT);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
+      const tokenVaultAddress = await findTokenVaultAddress(INTW_MINT);
 
       // Check if user stake account exists
       const accountInfo = await connection.getAccountInfo(userStakeAddress);
@@ -38,7 +39,7 @@ export const useStaking = () => {
           .accounts({
             user: wallet.publicKey,
             pool: poolAddress,
-            tokenVault: (await program.account.stakingPool.fetch(poolAddress)).tokenVault,
+            tokenVault: tokenVaultAddress,
             userTokenAccount: await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey),
             userStake: userStakeAddress,
             systemProgram: SystemProgram.programId,

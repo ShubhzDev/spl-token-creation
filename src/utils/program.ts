@@ -20,15 +20,63 @@ export const getProgram = (connection: Connection, wallet: any) => {
   );
 };
 
-export const findStakingPoolAddress = async (mint: PublicKey): Promise<PublicKey> => {
+// export const findStakingPoolAddress = async (mint: PublicKey): Promise<PublicKey> => {
+//   const [poolAddress] = await PublicKey.findProgramAddress(
+//     [
+//       Buffer.from('staking_pool'),
+//       mint.toBuffer()
+//     ],
+//     PROGRAM_ID
+//   );
+//   return poolAddress;
+// };
+
+// export const findUserStakeAddress = async (
+//   poolAddress: PublicKey,
+//   userAddress: PublicKey
+// ): Promise<PublicKey> => {
+//   const [stakeAddress] = await PublicKey.findProgramAddress(
+//     [
+//       Buffer.from('user_stake'),
+//       poolAddress.toBuffer(),
+//       userAddress.toBuffer()
+//     ],
+//     PROGRAM_ID
+//   );
+//   return stakeAddress;
+// };
+
+export const findTokenMintAddress = async (authority: PublicKey): Promise<PublicKey> => {
+  const [mintAddress] = await PublicKey.findProgramAddress(
+    [
+      Buffer.from('token_mint'),
+      authority.toBuffer()
+    ],
+    PROGRAM_ID
+  );
+  return mintAddress;
+};
+
+export const findStakingPoolAddress = async (tokenMint: PublicKey): Promise<PublicKey> => {
   const [poolAddress] = await PublicKey.findProgramAddress(
     [
       Buffer.from('staking_pool'),
-      mint.toBuffer()
+      tokenMint.toBuffer()
     ],
     PROGRAM_ID
   );
   return poolAddress;
+};
+
+export const findTokenVaultAddress = async (tokenMint: PublicKey): Promise<PublicKey> => {
+  const [vaultAddress] = await PublicKey.findProgramAddress(
+    [
+      Buffer.from('token_vault'),
+      tokenMint.toBuffer()
+    ],
+    PROGRAM_ID
+  );
+  return vaultAddress;
 };
 
 export const findUserStakeAddress = async (
