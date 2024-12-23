@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, Keypair } from '@solana/web3.js';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { BN } from '@coral-xyz/anchor';
 import { web3 } from '@coral-xyz/anchor';
 import { INTW_MINT, APY } from '../config/solana';
 import { StakingState } from '../types';
-import { getProgram, findStakingPoolAddress, findUserStakeAddress,findTokenVault } from '../utils/program';
+import { getProgram, findStakingPoolAddress, findUserStakeAddress, findTokenVault } from '../utils/program';
 import { getTokenBalance } from '../utils/token';
 
 const initialState: StakingState = {
@@ -22,18 +22,13 @@ export const useStaking = () => {
   const [stakingState, setStakingState] = useState<StakingState>(initialState);
   const program = getProgram(connection, wallet);
 
-  const initializePoolIfNeeded = async (poolAddress: PublicKey) => {
+  const initializePoolIfNeeded = async () => {
     try {
+      const { poolAddress, bump } = await findStakingPoolAddress(INTW_MINT);
       const poolInfo = await connection.getAccountInfo(poolAddress);
-      if (!poolInfo) {
-        const tokenVault = Keypair.generate();
-        const [, bump] = await PublicKey.findProgramAddress(
-          [Buffer.from('staking_pool'), INTW_MINT.toBuffer()],
-          program.programId
-        );
-
-        if(!wallet.publicKey)
-          return;
+      
+      if (!poolInfo && wallet.publicKey) {
+        const tokenVault = await findTokenVault(INTW_MINT);
 
         const tx = await program.methods
           .initializePool(bump)
@@ -41,16 +36,17 @@ export const useStaking = () => {
             authority: wallet.publicKey,
             tokenMint: INTW_MINT,
             pool: poolAddress,
-            tokenVault: tokenVault.publicKey,
+            tokenVault: tokenVault,
             systemProgram: SystemProgram.programId,
             tokenProgram: TOKEN_PROGRAM_ID,
             rent: web3.SYSVAR_RENT_PUBKEY,
           })
-          .signers([tokenVault])
           .rpc();
 
         await connection.confirmTransaction(tx, 'confirmed');
+        return bump;
       }
+      return bump;
     } catch (error) {
       console.error('Error initializing pool:', error);
       throw error;
@@ -61,14 +57,17 @@ export const useStaking = () => {
     if (!wallet.publicKey) return;
 
     try {
-      const poolAddress = await findStakingPoolAddress(INTW_MINT);
+      const { poolAddress } = await findStakingPoolAddress(INTW_MINT);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
       const tokenVault = await findTokenVault(INTW_MINT);
+
       console.log("Staking Pool Address:", poolAddress.toBase58());
       console.log("User Stake Address:", userStakeAddress.toBase58());
       console.log("User Token Account:", userTokenAccount.toBase58());
       console.log("Token Vault Address:", tokenVault.toBase58());
+
+      const bump = await initializePoolIfNeeded();
 
       const tx = await program.methods
         .stake(new BN(amount * 1e9))
@@ -82,7 +81,6 @@ export const useStaking = () => {
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([])
         .rpc();
 
       await connection.confirmTransaction(tx, 'confirmed');
@@ -97,7 +95,7 @@ export const useStaking = () => {
     if (!wallet.publicKey) return;
 
     try {
-      const poolAddress = await findStakingPoolAddress(INTW_MINT);
+      const { poolAddress } = await findStakingPoolAddress(INTW_MINT);
       const pool = await program.account.stakingPool.fetch(poolAddress);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
@@ -117,7 +115,6 @@ export const useStaking = () => {
           userStake: userStakeAddress,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([])
         .rpc();
 
       await connection.confirmTransaction(tx, 'confirmed');
@@ -132,9 +129,7 @@ export const useStaking = () => {
     if (!wallet.publicKey) return;
 
     try {
-      const poolAddress = await findStakingPoolAddress(INTW_MINT);
-      // await initializePoolIfNeeded(poolAddress);
-
+      const { poolAddress } = await findStakingPoolAddress(INTW_MINT);
       const pool = await program.account.stakingPool.fetch(poolAddress);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const availableAmount = await getTokenBalance(connection, wallet.publicKey, INTW_MINT);

@@ -1,21 +1,32 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, Mint, TokenAccount, Transfer};
+use anchor_spl::associated_token::AssociatedToken;
 
-declare_id!("HD2Ya6ng1icMrKyxdB74xC5fbud2zYyFwieQcbtGQS3k");
+declare_id!("DDqtf1nGhbkndVh8Vc8RqCPj3dimz9YkrJCjJzxxRqrs");
 
 #[program]
 pub mod staking_program {
     use super::*;
 
     pub fn initialize_pool(
-        ctx: Context<InitializePool>
+        ctx: Context<InitializePool>,
     ) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
+
+        // Derive PDA and get bump
+        let (_pda, bump) = Pubkey::find_program_address(
+            &[b"staking_pool", ctx.accounts.token_mint.key().as_ref()],
+            ctx.program_id,
+        );
+
+        // Initialize pool account
         pool.authority = ctx.accounts.authority.key();
         pool.token_mint = ctx.accounts.token_mint.key();
         pool.token_vault = ctx.accounts.token_vault.key();
         pool.total_staked = 0;
         pool.apy = 5; // Set APY to 5%
+        pool.bump = bump; // Set the bump field
+
         Ok(())
     }
 
@@ -104,6 +115,55 @@ pub mod staking_program {
         Ok(())
     }
 
+    pub fn close_pool(ctx: Context<ClosePool>) -> Result<()> {
+        let pool = &ctx.accounts.pool;
+
+        // Ensure the caller is the authority of the pool
+        require_keys_eq!(pool.authority, ctx.accounts.authority.key(), ErrorCode::Unauthorized);
+
+        // Ensure the pool has no remaining staked tokens
+        require!(pool.total_staked == 0, ErrorCode::PoolNotEmpty);
+
+        // Transfer any remaining tokens in the vault to the authority
+        let seeds = &[
+            pool.to_account_info().key.as_ref(),
+            &[pool.bump],
+        ];
+        let signer = &[&seeds[..]];
+
+        let remaining_tokens = ctx.accounts.token_vault.amount;
+        if remaining_tokens > 0 {
+            token::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    Transfer {
+                        from: ctx.accounts.token_vault.to_account_info(),
+                        to: ctx.accounts.authority_token_account.to_account_info(),
+                        authority: ctx.accounts.pool_authority.to_account_info(),
+                    },
+                    signer,
+                ),
+                remaining_tokens,
+            )?;
+        }
+
+        // Close the token vault account
+        token::close_account(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                token::CloseAccount {
+                    account: ctx.accounts.token_vault.to_account_info(),
+                    destination: ctx.accounts.authority.to_account_info(),
+                    authority: ctx.accounts.pool_authority.to_account_info(),
+                },
+                signer,
+            ),
+        )?;
+
+        Ok(())
+    }
+
+
 }
 
     pub fn calculate_rewards(
@@ -187,10 +247,12 @@ pub struct Stake<'info> {
     
     #[account(
         mut,
-        constraint = user_token_account.owner == user.key(),
-        constraint = user_token_account.mint == token_mint.key(),
+        associated_token::mint=token_mint,
+        associated_token::authority=user,
     )]
     pub user_token_account: Account<'info, TokenAccount>,
+
+    pub associated_token_program : Program<'info,AssociatedToken>,
 
     #[account(
         init_if_needed,
@@ -261,8 +323,34 @@ impl UserStake {
    pub const LEN: usize = 32 + 32 + 8 + 8 + 8; // Sizes of fields in UserStake
 }
 
+#[derive(Accounts)]
+pub struct ClosePool<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>, // Pool authority
+
+    #[account(mut, close = authority)]
+    pub pool: Account<'info, StakingPool>, // Staking pool account to be closed
+
+    /// CHECK: Pool authority PDA
+    #[account(seeds = [pool.key().as_ref()], bump = pool.bump)]
+    pub pool_authority: AccountInfo<'info>, // PDA for the pool authority
+
+    #[account(mut)]
+    pub token_vault: Account<'info, TokenAccount>, // Token vault to be closed
+
+    #[account(mut)]
+    pub authority_token_account: Account<'info, TokenAccount>, // Authority's token account for remaining tokens
+
+    pub token_program: Program<'info, Token>, // SPL Token program
+}
+
+
 #[error_code]
 pub enum ErrorCode {
-   #[msg("Insufficient stake amount")]
-   InsufficientStake,
+    #[msg("Insufficient stake amount")]
+    InsufficientStake,
+    #[msg("Unauthorized operation")]
+    Unauthorized,
+    #[msg("Pool is not empty")]
+    PoolNotEmpty,
 }

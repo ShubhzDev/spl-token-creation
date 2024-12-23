@@ -17,14 +17,14 @@ export const getProgram = (connection: Connection, wallet: any) => {
 };
 
 export const findStakingPoolAddress = async (mint: PublicKey) => {
-  const [poolAddress] = PublicKey.findProgramAddressSync(
+  const [poolAddress, bump] = PublicKey.findProgramAddressSync(
     [
       Buffer.from('staking_pool'),
       mint.toBuffer()
     ],
     PROGRAM_ID
   );
-  return poolAddress;
+  return { poolAddress, bump };
 };
 
 export const findUserStakeAddress = async (
@@ -43,12 +43,12 @@ export const findUserStakeAddress = async (
 };
 
 export const findTokenVault = async (mint: PublicKey) => {
-  const [poolAddress] = PublicKey.findProgramAddressSync(
+  const [vaultAddress] = PublicKey.findProgramAddressSync(
     [
       Buffer.from('token_vault'),
       mint.toBuffer()
     ],
     PROGRAM_ID
   );
-  return poolAddress;
+  return vaultAddress;
 };
