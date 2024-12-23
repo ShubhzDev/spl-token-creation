@@ -6,7 +6,7 @@ import { BN } from '@coral-xyz/anchor';
 import { web3 } from '@coral-xyz/anchor';
 import { INTW_MINT, APY } from '../config/solana';
 import { StakingState } from '../types';
-import { getProgram, findStakingPoolAddress, findUserStakeAddress } from '../utils/program';
+import { getProgram, findStakingPoolAddress, findUserStakeAddress,findTokenVault } from '../utils/program';
 import { getTokenBalance } from '../utils/token';
 
 const initialState: StakingState = {
@@ -31,6 +31,9 @@ export const useStaking = () => {
           [Buffer.from('staking_pool'), INTW_MINT.toBuffer()],
           program.programId
         );
+
+        if(!wallet.publicKey)
+          return;
 
         const tx = await program.methods
           .initializePool(bump)
@@ -59,17 +62,21 @@ export const useStaking = () => {
 
     try {
       const poolAddress = await findStakingPoolAddress(INTW_MINT);
-      const pool = await program.account.stakingPool.fetch(poolAddress);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
+      const tokenVault = await findTokenVault(INTW_MINT);
+      console.log("Staking Pool Address:", poolAddress.toBase58());
+      console.log("User Stake Address:", userStakeAddress.toBase58());
+      console.log("User Token Account:", userTokenAccount.toBase58());
+      console.log("Token Vault Address:", tokenVault.toBase58());
 
       const tx = await program.methods
         .stake(new BN(amount * 1e9))
         .accounts({
           user: wallet.publicKey,
           pool: poolAddress,
-          tokenMint: INTW_MINT, // Add tokenMint account
-          tokenVault: pool.tokenVault,
+          tokenMint: INTW_MINT,
+          tokenVault: tokenVault,
           userTokenAccount,
           userStake: userStakeAddress,
           systemProgram: SystemProgram.programId,
