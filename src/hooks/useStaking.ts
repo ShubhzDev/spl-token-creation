@@ -99,10 +99,11 @@ export const useStaking = () => {
       const pool = await program.account.stakingPool.fetch(poolAddress);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
-      const poolAuthorityPDA = PublicKey.findProgramAddressSync(
+      const poolAuthorityPDA = await PublicKey.findProgramAddressSync(
         [poolAddress.toBuffer()],
         program.programId
       )[0];
+      const tokenVault = await findTokenVault(INTW_MINT);
 
       const tx = await program.methods
         .unstake(new BN(amount * 1e9))
@@ -110,7 +111,7 @@ export const useStaking = () => {
           user: wallet.publicKey,
           pool: poolAddress,
           poolAuthority: poolAuthorityPDA,
-          tokenVault: pool.tokenVault,
+          tokenVault: tokenVault,
           userTokenAccount,
           userStake: userStakeAddress,
           tokenProgram: TOKEN_PROGRAM_ID,
