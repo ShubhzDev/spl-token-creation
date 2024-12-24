@@ -6,7 +6,7 @@ import { BN } from '@coral-xyz/anchor';
 import { web3 } from '@coral-xyz/anchor';
 import { INTW_MINT, APY } from '../config/solana';
 import { StakingState } from '../types';
-import { getProgram, findStakingPoolAddress, findUserStakeAddress, findTokenVault } from '../utils/program';
+import { getProgram, findStakingPoolAddress, findUserStakeAddress, findTokenVault,findPoolAuthorityAddress } from '../utils/program';
 import { getTokenBalance } from '../utils/token';
 
 const initialState: StakingState = {
@@ -99,10 +99,6 @@ export const useStaking = () => {
       const pool = await program.account.stakingPool.fetch(poolAddress);
       const userStakeAddress = await findUserStakeAddress(poolAddress, wallet.publicKey);
       const userTokenAccount = await getAssociatedTokenAddress(INTW_MINT, wallet.publicKey);
-      const poolAuthorityPDA = await PublicKey.findProgramAddressSync(
-        [poolAddress.toBuffer()],
-        program.programId
-      )[0];
       const tokenVault = await findTokenVault(INTW_MINT);
 
       const tx = await program.methods
@@ -110,9 +106,9 @@ export const useStaking = () => {
         .accounts({
           user: wallet.publicKey,
           pool: poolAddress,
-          poolAuthority: poolAuthorityPDA,
           tokenVault: tokenVault,
           userTokenAccount,
+          tokenMint: INTW_MINT,
           userStake: userStakeAddress,
           tokenProgram: TOKEN_PROGRAM_ID,
         })

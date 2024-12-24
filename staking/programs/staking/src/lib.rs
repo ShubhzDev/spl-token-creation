@@ -4,6 +4,10 @@ use anchor_spl::associated_token::AssociatedToken;
 
 declare_id!("DDqtf1nGhbkndVh8Vc8RqCPj3dimz9YkrJCjJzxxRqrs");
 
+pub mod constants{
+    pub const VAULT_SEED : &[u8] = b"token_vault";
+}
+
 #[program]
 pub mod staking_program {
     use super::*;
@@ -81,13 +85,15 @@ pub mod staking_program {
             pool.apy,
         );
 
+        let bump = ctx.bumps.token_vault;
+        let signer : &[&[&[u8]]] = &[&[constants::VAULT_SEED,&[bump]]];
+
         // Prepare to transfer tokens back to the user
         let seeds = &[
             pool.to_account_info().key.as_ref(),
             &[pool.bump],
         ];
         
-        let signer = &[&seeds[..]];
 
         token::transfer(
             CpiContext::new_with_signer(
@@ -95,7 +101,7 @@ pub mod staking_program {
                 Transfer {
                     from: ctx.accounts.token_vault.to_account_info(),
                     to: ctx.accounts.user_token_account.to_account_info(),
-                    authority: ctx.accounts.pool_authority.to_account_info(),
+                    authority: ctx.accounts.token_vault.to_account_info(),
                 },
                 signer,
             ),
@@ -276,15 +282,19 @@ pub struct Unstake<'info> {
    #[account(mut)]
    pub pool: Account<'info, StakingPool>,
 
-   /// CHECK: Pool authority PDA
-   #[account(seeds = [pool.key().as_ref()], bump = pool.bump)]
-   pub pool_authority: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [b"token_vault", token_mint.key().as_ref()],
+        bump
+    )]
+    pub token_vault: Account<'info, TokenAccount>,
 
-   #[account(mut)]
-   pub token_vault: Account<'info, TokenAccount>,
-
-   #[account(mut)]
-   pub user_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        associated_token::mint=token_mint,
+        associated_token::authority=user,
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
 
    #[account(
        mut,
@@ -294,6 +304,9 @@ pub struct Unstake<'info> {
    pub user_stake: Account<'info, UserStake>,
 
    pub token_program: Program<'info, Token>,
+
+   pub token_mint: Account<'info, Mint>,
+
 }
 
 #[account]

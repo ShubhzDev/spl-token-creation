@@ -52,3 +52,11 @@ export const findTokenVault = async (mint: PublicKey) => {
   );
   return vaultAddress;
 };
+
+export const findPoolAuthorityAddress = async (mint: PublicKey) => {
+  const [authorityAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('staking_pool'), mint.toBuffer()],
+    PROGRAM_ID
+  );
+  return authorityAddress;
+};
