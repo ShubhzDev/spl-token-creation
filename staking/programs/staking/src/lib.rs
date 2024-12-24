@@ -67,57 +67,53 @@ pub mod staking_program {
         Ok(())
     }
 
-    pub fn unstake(
-        ctx: Context<Unstake>,
-        amount: u64,
-    ) -> Result<()> {
-        let pool = &mut ctx.accounts.pool;
-        let user_stake = &mut ctx.accounts.user_stake;
+    pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
         let clock = Clock::get()?;
 
-        require!(amount <= user_stake.amount, ErrorCode::InsufficientStake);
-
-        // Calculate rewards based on the user's stake
-        let rewards = calculate_rewards(
-            user_stake.amount,
-            user_stake.last_update,
-            clock.unix_timestamp,
-            pool.apy,
+        // Check if the user has sufficient stake
+        require!(
+            amount <= ctx.accounts.user_stake.amount,
+            ErrorCode::InsufficientStake
         );
 
-        let bump = ctx.bumps.token_vault;
-        let signer : &[&[&[u8]]] = &[&[constants::VAULT_SEED,&[bump]]];
+        // Calculate rewards
+        let rewards = calculate_rewards(
+            ctx.accounts.user_stake.amount,
+            ctx.accounts.user_stake.last_update,
+            clock.unix_timestamp,
+            ctx.accounts.pool.apy,
+        );
 
-        // Prepare to transfer tokens back to the user
-        let seeds = &[
-            pool.to_account_info().key.as_ref(),
-            &[pool.bump],
+        // Prepare seeds for PDA signing
+        let pool_seeds = &[
+            b"staking_pool",
+            ctx.accounts.token_mint.to_account_info().key.as_ref(),
+            &[ctx.accounts.pool.bump],
         ];
-        
+        let pool_signer = &[&pool_seeds[..]];
 
+        // Transfer tokens from vault to user
         token::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
                     from: ctx.accounts.token_vault.to_account_info(),
                     to: ctx.accounts.user_token_account.to_account_info(),
-                    authority: ctx.accounts.token_vault.to_account_info(),
+                    authority: ctx.accounts.pool.to_account_info(),
                 },
-                signer,
+                pool_signer,
             ),
             amount.checked_add(rewards).unwrap(),
         )?;
 
-        // Update user's stake information after unstaking
-        user_stake.amount = user_stake.amount.checked_sub(amount).unwrap();
-        user_stake.last_update = clock.unix_timestamp;
-        
-        // Reset rewards after unstaking
-        user_stake.rewards = 0;
+        // Update user stake information
+        ctx.accounts.user_stake.amount = ctx.accounts.user_stake.amount.checked_sub(amount).unwrap();
+        ctx.accounts.user_stake.last_update = clock.unix_timestamp;
+        ctx.accounts.user_stake.rewards = 0;
 
-        // Update total staked in the pool
-        pool.total_staked = pool.total_staked.checked_sub(amount).unwrap();
-        
+        // Update pool total staked
+        ctx.accounts.pool.total_staked = ctx.accounts.pool.total_staked.checked_sub(amount).unwrap();
+
         Ok(())
     }
 
@@ -279,7 +275,10 @@ pub struct Unstake<'info> {
    #[account(mut)]
    pub user: Signer<'info>,
 
-   #[account(mut)]
+   #[account(mut,
+       seeds = [b"staking_pool", token_mint.key().as_ref()],
+       bump = pool.bump,
+   )]
    pub pool: Account<'info, StakingPool>,
 
     #[account(
